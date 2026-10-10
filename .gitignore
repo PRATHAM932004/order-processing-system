@@ -186,3 +186,5 @@ NOTES.local.md
 docs/*
 
 application.yaml
+
+stitch_specs/*

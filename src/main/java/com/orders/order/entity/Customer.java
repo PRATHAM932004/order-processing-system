@@ -30,12 +30,27 @@ public class Customer {
     @Column(nullable = false, unique = true, length = 150)
     private String email;
 
+    @Column(name = "password_hash")
+    private String passwordHash;
+
+    @Column(nullable = false, length = 20)
+    private String role = "CUSTOMER";
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
     public Customer(String name, String email) {
         this.name = name;
         this.email = email;
+        this.role = "CUSTOMER";
+        this.createdAt = Instant.now();
+    }
+
+    public Customer(String name, String email, String passwordHash, String role) {
+        this.name = name;
+        this.email = email;
+        this.passwordHash = passwordHash;
+        this.role = role != null ? role : "CUSTOMER";
         this.createdAt = Instant.now();
     }
 }

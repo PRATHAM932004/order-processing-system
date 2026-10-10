@@ -13,4 +13,8 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, UUID> 
 
     @Query("SELECT o FROM OutboxEvent o WHERE o.publishedAt IS NULL ORDER BY o.createdAt ASC")
     List<OutboxEvent> findUnpublishedEvents(Pageable pageable);
+
+    List<OutboxEvent> findTop50ByOrderByCreatedAtDesc();
+
+    List<OutboxEvent> findByAggregateIdOrderByCreatedAtAsc(UUID aggregateId);
 }
