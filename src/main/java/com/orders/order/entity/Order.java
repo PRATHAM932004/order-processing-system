@@ -43,6 +43,9 @@ public class Order {
     @Column(name = "total_amount", nullable = false, precision = 12, scale = 2)
     private BigDecimal totalAmount;
 
+    @Column(name = "payment_method", length = 30)
+    private String paymentMethod = "UPI";
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -56,6 +59,14 @@ public class Order {
         this.customerId = customerId;
         this.status = OrderStatus.PENDING;
         this.totalAmount = totalAmount;
+        this.paymentMethod = "UPI";
+    }
+
+    public Order(UUID customerId, BigDecimal totalAmount, String paymentMethod) {
+        this.customerId = customerId;
+        this.status = OrderStatus.PENDING;
+        this.totalAmount = totalAmount;
+        this.paymentMethod = (paymentMethod != null && !paymentMethod.isBlank()) ? paymentMethod.trim().toUpperCase() : "UPI";
     }
 
     public void addItem(OrderItem item) {

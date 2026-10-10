@@ -11,4 +11,12 @@ public record AuthenticatedUser(
     public boolean isAdmin() {
         return "ADMIN".equalsIgnoreCase(role);
     }
+
+    public boolean isInventoryManager() {
+        return "INVENTORY_MANAGER".equalsIgnoreCase(role);
+    }
+
+    public boolean canManageInventory() {
+        return isAdmin() || isInventoryManager();
+    }
 }

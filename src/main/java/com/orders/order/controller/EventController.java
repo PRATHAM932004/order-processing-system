@@ -51,7 +51,7 @@ public class EventController {
         AuthenticatedUser currentUser = (auth != null && auth.getPrincipal() instanceof AuthenticatedUser u) ? u : null;
 
         Set<UUID> allowedOrderIds = null;
-        if (currentUser != null && !currentUser.isAdmin()) {
+        if (currentUser != null && !currentUser.canManageInventory()) {
             allowedOrderIds = orderRepository.findByCustomerIdWithItemsOrderByCreatedAtDesc(currentUser.id())
                     .stream()
                     .map(Order::getId)
@@ -60,10 +60,14 @@ public class EventController {
 
         List<KafkaEventResponse> allEvents = new ArrayList<>();
 
+        boolean isInventoryOnly = currentUser != null && currentUser.isInventoryManager();
+
         // 1. Outbox Events (OrderCreated on order.created)
-        List<OutboxEvent> outboxEvents = orderId != null
-                ? outboxEventRepository.findByAggregateIdOrderByCreatedAtAsc(orderId)
-                : outboxEventRepository.findTop50ByOrderByCreatedAtDesc();
+        List<OutboxEvent> outboxEvents = isInventoryOnly
+                ? List.of()
+                : (orderId != null
+                    ? outboxEventRepository.findByAggregateIdOrderByCreatedAtAsc(orderId)
+                    : outboxEventRepository.findTop50ByOrderByCreatedAtDesc());
 
         long offsetCounter = 1000;
         for (OutboxEvent oe : outboxEvents) {
@@ -139,9 +143,11 @@ public class EventController {
         }
 
         // 3. Payments (order.payment)
-        List<Payment> payments = orderId != null
-                ? paymentRepository.findByOrderId(orderId).map(List::of).orElse(List.of())
-                : paymentRepository.findAll();
+        List<Payment> payments = isInventoryOnly
+                ? List.of()
+                : (orderId != null
+                    ? paymentRepository.findByOrderId(orderId).map(List::of).orElse(List.of())
+                    : paymentRepository.findAll());
 
         for (Payment p : payments) {
             if (allowedOrderIds != null && !allowedOrderIds.contains(p.getOrderId())) {

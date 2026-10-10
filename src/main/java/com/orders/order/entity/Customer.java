@@ -33,7 +33,7 @@ public class Customer {
     @Column(name = "password_hash")
     private String passwordHash;
 
-    @Column(nullable = false, length = 20)
+    @Column(nullable = false, length = 50)
     private String role = "CUSTOMER";
 
     @Column(name = "created_at", nullable = false)

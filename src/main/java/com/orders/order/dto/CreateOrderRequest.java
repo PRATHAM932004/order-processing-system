@@ -22,4 +22,12 @@ public class CreateOrderRequest {
 
     @NotEmpty(message = "items list must not be empty")
     private List<@Valid OrderItemRequest> items;
+
+    private String paymentMethod;
+
+    public CreateOrderRequest(UUID customerId, List<OrderItemRequest> items) {
+        this.customerId = customerId;
+        this.items = items;
+        this.paymentMethod = "UPI";
+    }
 }

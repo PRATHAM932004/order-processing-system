@@ -48,20 +48,25 @@ public class PaymentService {
             return null;
         }
 
-        // BR-009: Deterministic mock payment evaluation
+        // BR-009: Deterministic mock payment evaluation (via paymentMethod = MOCK_FAIL/MOCK or TEST_FAIL_CUSTOMER_ID)
         PaymentStatus status;
         PaymentMethod method;
 
-        if (TEST_FAIL_CUSTOMER_ID.equals(order.getCustomerId())) {
-            log.info("Simulating payment failure for designated test customer: {} on order: {}",
-                    order.getCustomerId(), orderId);
+        String requestedMethod = order.getPaymentMethod();
+        boolean isSimulatedFailure = TEST_FAIL_CUSTOMER_ID.equals(order.getCustomerId())
+                || "MOCK_FAIL".equalsIgnoreCase(requestedMethod)
+                || "MOCK".equalsIgnoreCase(requestedMethod);
+
+        if (isSimulatedFailure) {
+            log.info("Simulating payment failure for order: {} (customer: {}, paymentMethod: {})",
+                    orderId, order.getCustomerId(), requestedMethod);
             status = PaymentStatus.FAILED;
             method = PaymentMethod.MOCK;
         } else {
-            log.info("Processing successful payment for customer: {} on order: {}",
-                    order.getCustomerId(), orderId);
+            log.info("Processing successful payment for customer: {} on order: {} using method: {}",
+                    order.getCustomerId(), orderId, requestedMethod);
             status = PaymentStatus.SUCCEEDED;
-            method = PaymentMethod.UPI;
+            method = resolvePaymentMethod(requestedMethod);
         }
 
         Payment payment = new Payment(orderId, status, order.getTotalAmount(), method);
@@ -79,5 +84,16 @@ public class PaymentService {
                 order.getTotalAmount(),
                 savedPayment.getId()
         );
+    }
+
+    private PaymentMethod resolvePaymentMethod(String requestedMethod) {
+        if (requestedMethod == null || requestedMethod.isBlank()) {
+            return PaymentMethod.UPI;
+        }
+        try {
+            return PaymentMethod.valueOf(requestedMethod.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            return PaymentMethod.UPI;
+        }
     }
 }

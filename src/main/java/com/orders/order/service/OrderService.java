@@ -66,6 +66,10 @@ public class OrderService {
         AuthenticatedUser currentUser = getCurrentAuthenticatedUser();
         UUID targetCustomerId = request.getCustomerId();
 
+        if (currentUser != null && currentUser.isInventoryManager()) {
+            throw new AccessDeniedException("Inventory Managers cannot place customer orders");
+        }
+
         if (currentUser != null && !currentUser.isAdmin()) {
             if (targetCustomerId != null && !targetCustomerId.equals(currentUser.id())) {
                 throw new AccessDeniedException("Customers can only place orders for themselves");
@@ -102,7 +106,7 @@ public class OrderService {
             ));
         }
 
-        Order order = new Order(customer.getId(), totalAmount);
+        Order order = new Order(customer.getId(), totalAmount, request.getPaymentMethod());
         for (OrderItem item : orderItems) {
             order.addItem(item);
         }
