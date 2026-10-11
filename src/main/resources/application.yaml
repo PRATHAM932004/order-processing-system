@@ -37,6 +37,7 @@ spring:
       security.protocol: ${KAFKA_SECURITY_PROTOCOL:PLAINTEXT}
       sasl.mechanism: ${KAFKA_SASL_MECHANISM:PLAIN}
       sasl.jaas.config: ${KAFKA_SASL_JAAS_CONFIG:}
+      ssl.endpoint.identification.algorithm: ${KAFKA_SSL_ENDPOINT_ALGORITHM:}
     consumer:
       auto-offset-reset: earliest
       enable-auto-commit: false
