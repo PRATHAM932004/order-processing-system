@@ -71,8 +71,10 @@ public class SystemStatusController {
                 int slashIdx = hostPortPart.indexOf('/');
                 if (slashIdx > 0) {
                     String hostPort = hostPortPart.substring(0, slashIdx);
-                    if (hostPort.contains(":")) {
+                    if (hostPort.startsWith("localhost:") || hostPort.startsWith("127.0.0.1:")) {
                         dbEndpoint = ":" + hostPort.substring(hostPort.lastIndexOf(':') + 1);
+                    } else {
+                        dbEndpoint = hostPort;
                     }
                 }
             }
@@ -166,11 +168,14 @@ public class SystemStatusController {
             return false;
         }
         String firstBroker = bootstrapServers.split(",")[0].trim();
+        if (firstBroker.contains("://")) {
+            firstBroker = firstBroker.substring(firstBroker.indexOf("://") + 3);
+        }
         String[] parts = firstBroker.split(":");
         String host = parts[0];
         int port = parts.length > 1 ? Integer.parseInt(parts[1]) : 9092;
         try (Socket socket = new Socket()) {
-            socket.connect(new InetSocketAddress(host, port), 500);
+            socket.connect(new InetSocketAddress(host, port), 2000);
             return true;
         } catch (Exception e) {
             return false;

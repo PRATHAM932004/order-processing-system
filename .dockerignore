@@ -1,0 +1,11 @@
+target/
+.git/
+.idea/
+.vscode/
+.env
+.env.*
+*.log
+docs/
+stitch_specs/
+docker-compose.yml
+HELP.md
