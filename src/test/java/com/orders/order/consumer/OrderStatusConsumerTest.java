@@ -19,12 +19,15 @@ import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import org.springframework.kafka.support.Acknowledgment;
+
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -39,6 +42,9 @@ class OrderStatusConsumerTest {
 
     @Mock
     private ProcessedEventRepository processedEventRepository;
+
+    @Mock
+    private Acknowledgment acknowledgment;
 
     @Spy
     private ObjectMapper objectMapper = new ObjectMapper().registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
@@ -149,5 +155,27 @@ class OrderStatusConsumerTest {
         assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
         verify(orderRepository).save(order);
         verify(processedEventRepository).save(any(ProcessedEvent.class));
+    }
+
+    @Test
+    @DisplayName("onInventoryResult withholds acknowledgment and rethrows on unhandled exception")
+    void onInventoryResult_whenMalformedMessage_withholdsAcknowledgmentAndThrows() {
+        String invalidMessage = "{invalid-json}";
+
+        assertThatThrownBy(() -> orderStatusConsumer.onInventoryResult(invalidMessage, acknowledgment))
+                .isInstanceOf(Exception.class);
+
+        verify(acknowledgment, never()).acknowledge();
+    }
+
+    @Test
+    @DisplayName("onPaymentResult withholds acknowledgment and rethrows on unhandled exception")
+    void onPaymentResult_whenMalformedMessage_withholdsAcknowledgmentAndThrows() {
+        String invalidMessage = "{invalid-json}";
+
+        assertThatThrownBy(() -> orderStatusConsumer.onPaymentResult(invalidMessage, acknowledgment))
+                .isInstanceOf(Exception.class);
+
+        verify(acknowledgment, never()).acknowledge();
     }
 }

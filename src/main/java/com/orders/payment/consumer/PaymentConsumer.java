@@ -24,7 +24,7 @@ public class PaymentConsumer {
     private final ObjectMapper objectMapper;
 
     @KafkaListener(topics = KafkaTopics.ORDER_INVENTORY, groupId = PaymentService.CONSUMER_NAME)
-    public void onInventoryResult(String message, Acknowledgment acknowledgment) {
+    public void onInventoryResult(String message, Acknowledgment acknowledgment) throws Exception {
         try {
             EventEnvelope<InventoryResultPayload> envelope = objectMapper.readValue(
                     message,
@@ -66,7 +66,7 @@ public class PaymentConsumer {
             acknowledgment.acknowledge();
         } catch (Exception e) {
             log.error("Failed to process inventory result event for payment: {}", message, e);
-            // Withhold acknowledgment to enable Kafka redelivery on unexpected failure
+            throw e;
         }
     }
 }

@@ -21,6 +21,7 @@ import org.springframework.kafka.support.Acknowledgment;
 import java.math.BigDecimal;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
@@ -125,11 +126,12 @@ class PaymentConsumerTest {
     }
 
     @Test
-    @DisplayName("Should withhold acknowledgment when an unhandled exception occurs (e.g., malformed payload)")
-    void onInventoryResult_whenMalformedMessage_withholdsAcknowledgment() {
+    @DisplayName("Should withhold acknowledgment and rethrow when an unhandled exception occurs (e.g., malformed payload)")
+    void onInventoryResult_whenMalformedMessage_withholdsAcknowledgmentAndThrows() {
         String invalidMessage = "{invalid-json}";
 
-        paymentConsumer.onInventoryResult(invalidMessage, acknowledgment);
+        assertThatThrownBy(() -> paymentConsumer.onInventoryResult(invalidMessage, acknowledgment))
+                .isInstanceOf(Exception.class);
 
         verify(acknowledgment, never()).acknowledge();
         verify(kafkaTemplate, never()).send(any(), any(), any());

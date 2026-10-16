@@ -39,7 +39,14 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.context.TestPropertySource;
 
+import org.apache.kafka.clients.consumer.Consumer;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.springframework.kafka.core.ConsumerFactory;
+import org.springframework.kafka.test.utils.KafkaTestUtils;
+
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -52,12 +59,19 @@ import static org.awaitility.Awaitility.await;
 @Import(TestcontainersConfiguration.class)
 @TestPropertySource(properties = {
         "orders.outbox.poll-interval-ms=200",
-        "spring.kafka.consumer.auto-offset-reset=earliest"
+        "spring.kafka.consumer.auto-offset-reset=earliest",
+        "orders.kafka.retry.max-attempts=3",
+        "orders.kafka.retry.initial-interval-ms=100",
+        "orders.kafka.retry.multiplier=1.5",
+        "orders.kafka.retry.max-interval-ms=500"
 })
 class OrderProcessingSystemIntegrationTest {
 
     @Autowired
     private OrderService orderService;
+
+    @Autowired
+    private ConsumerFactory<String, String> consumerFactory;
 
     @Autowired
     private OrderRepository orderRepository;
@@ -296,5 +310,59 @@ class OrderProcessingSystemIntegrationTest {
 
         assertThat(processedEventRepository.existsByEventIdAndConsumerName(fixedEventId, InventoryService.CONSUMER_NAME))
                 .isTrue();
+    }
+
+    @Test
+    @DisplayName("Scenario 5: Poison pill message retries and recovers to DLT without blocking partition")
+    void shouldRecoverPoisonPillToDeadLetterTopicAndUnblockPartition() throws Exception {
+        // Subscribe a test consumer to the DLT topic to verify dead-letter publication
+        try (Consumer<String, String> dltConsumer = consumerFactory.createConsumer("dlt-test-verifier-group", "dlt-verifier")) {
+            dltConsumer.subscribe(List.of(KafkaTopics.ORDER_CREATED_DLT));
+
+            // Publish an unparsable poison-pill payload to order.created
+            String poisonPillMessage = "{\"invalid\":\"malformed-poison-pill-payload\"}";
+            kafkaTemplate.send(KafkaTopics.ORDER_CREATED, UUID.randomUUID().toString(), poisonPillMessage)
+                    .get(10, TimeUnit.SECONDS);
+
+            // Await delivery to the Dead Letter Topic by DeadLetterPublishingRecoverer
+            ConsumerRecord<String, String> dltRecord = KafkaTestUtils.getSingleRecord(dltConsumer, KafkaTopics.ORDER_CREATED_DLT, Duration.ofSeconds(15));
+            assertThat(dltRecord).isNotNull();
+            assertThat(dltRecord.value()).isEqualTo(poisonPillMessage);
+
+            // Verify standard Kafka DLT headers attached by DeadLetterPublishingRecoverer
+            byte[] originalTopicHeader = dltRecord.headers().lastHeader("kafka_dlt-original-topic").value();
+            assertThat(new String(originalTopicHeader, StandardCharsets.UTF_8)).isEqualTo(KafkaTopics.ORDER_CREATED);
+            assertThat(dltRecord.headers().lastHeader("kafka_dlt-exception-message")).isNotNull();
+
+            // Crucial verification: Prove the partition was NOT blocked!
+            // A subsequent valid order message on the same topic must be processed normally.
+            Customer customer = customerRepository.save(new Customer("Evan Wright", "evan.wright@example.com"));
+            Product product = productRepository.save(new Product("Smart Speaker", "Audio", new BigDecimal("80.00"), 10));
+
+            authenticateAs(customer);
+
+            CreateOrderRequest validRequest = new CreateOrderRequest(
+                    customer.getId(),
+                    List.of(new OrderItemRequest(product.getId(), 1)),
+                    "UPI"
+            );
+
+            OrderResponse placedOrder = orderService.placeOrder(validRequest);
+            UUID orderId = placedOrder.id();
+
+            await().atMost(20, TimeUnit.SECONDS)
+                    .pollInterval(200, TimeUnit.MILLISECONDS)
+                    .untilAsserted(() -> {
+                        Order order = orderRepository.findById(orderId).orElseThrow();
+                        assertThat(order.getStatus()).isEqualTo(OrderStatus.CONFIRMED);
+
+                        Product updatedProduct = productRepository.findById(product.getId()).orElseThrow();
+                        assertThat(updatedProduct.getStockQuantity()).isEqualTo(9);
+
+                        List<Payment> payments = paymentRepository.findAll();
+                        assertThat(payments).hasSize(1);
+                        assertThat(payments.get(0).getStatus()).isEqualTo(PaymentStatus.SUCCEEDED);
+                    });
+        }
     }
 }

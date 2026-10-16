@@ -25,7 +25,7 @@ public class InventoryConsumer {
     private final ObjectMapper objectMapper;
 
     @KafkaListener(topics = KafkaTopics.ORDER_CREATED, groupId = InventoryService.CONSUMER_NAME)
-    public void onOrderCreated(String message, Acknowledgment acknowledgment) {
+    public void onOrderCreated(String message, Acknowledgment acknowledgment) throws Exception {
         try {
             EventEnvelope<OrderCreatedPayload> envelope = objectMapper.readValue(
                     message,
@@ -57,12 +57,12 @@ public class InventoryConsumer {
             acknowledgment.acknowledge();
         } catch (Exception e) {
             log.error("Failed to process OrderCreated event message: {}", message, e);
-            // In manual ack mode, withholding acknowledgment enables Kafka redelivery
+            throw e;
         }
     }
 
     @KafkaListener(topics = KafkaTopics.ORDER_PAYMENT, groupId = InventoryService.COMPENSATION_CONSUMER_NAME)
-    public void onPaymentResult(String message, Acknowledgment acknowledgment) {
+    public void onPaymentResult(String message, Acknowledgment acknowledgment) throws Exception {
         try {
             EventEnvelope<PaymentResultPayload> envelope = objectMapper.readValue(
                     message,
@@ -79,6 +79,7 @@ public class InventoryConsumer {
             acknowledgment.acknowledge();
         } catch (Exception e) {
             log.error("Failed to process PaymentResult event for compensation: {}", message, e);
+            throw e;
         }
     }
 }

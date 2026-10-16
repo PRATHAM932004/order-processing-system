@@ -30,7 +30,7 @@ public class OrderStatusConsumer {
     private final ObjectMapper objectMapper;
 
     @KafkaListener(topics = KafkaTopics.ORDER_INVENTORY, groupId = CONSUMER_NAME)
-    public void onInventoryResult(String message, Acknowledgment acknowledgment) {
+    public void onInventoryResult(String message, Acknowledgment acknowledgment) throws Exception {
         try {
             EventEnvelope<InventoryResultPayload> envelope = objectMapper.readValue(
                     message,
@@ -44,7 +44,7 @@ public class OrderStatusConsumer {
             acknowledgment.acknowledge();
         } catch (Exception e) {
             log.error("Failed to process inventory result message: {}", message, e);
-            // In manual ack mode, not acknowledging causes message redelivery
+            throw e;
         }
     }
 
@@ -77,7 +77,7 @@ public class OrderStatusConsumer {
     }
 
     @KafkaListener(topics = KafkaTopics.ORDER_PAYMENT, groupId = CONSUMER_NAME)
-    public void onPaymentResult(String message, Acknowledgment acknowledgment) {
+    public void onPaymentResult(String message, Acknowledgment acknowledgment) throws Exception {
         try {
             EventEnvelope<PaymentResultPayload> envelope = objectMapper.readValue(
                     message,
@@ -91,6 +91,7 @@ public class OrderStatusConsumer {
             acknowledgment.acknowledge();
         } catch (Exception e) {
             log.error("Failed to process payment result message: {}", message, e);
+            throw e;
         }
     }
 

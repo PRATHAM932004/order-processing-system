@@ -23,6 +23,7 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
@@ -161,5 +162,29 @@ class InventoryConsumerTest {
 
         verify(inventoryService, never()).compensateInventory(any());
         verify(acknowledgment).acknowledge();
+    }
+
+    @Test
+    @DisplayName("Should withhold acknowledgment and rethrow exception on unhandled error in onOrderCreated")
+    void onOrderCreated_whenMalformedMessage_withholdsAcknowledgmentAndThrows() {
+        String invalidMessage = "{invalid-json}";
+
+        assertThatThrownBy(() -> inventoryConsumer.onOrderCreated(invalidMessage, acknowledgment))
+                .isInstanceOf(Exception.class);
+
+        verify(acknowledgment, never()).acknowledge();
+        verify(kafkaTemplate, never()).send(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("Should withhold acknowledgment and rethrow exception on unhandled error in onPaymentResult")
+    void onPaymentResult_whenMalformedMessage_withholdsAcknowledgmentAndThrows() {
+        String invalidMessage = "{invalid-json}";
+
+        assertThatThrownBy(() -> inventoryConsumer.onPaymentResult(invalidMessage, acknowledgment))
+                .isInstanceOf(Exception.class);
+
+        verify(acknowledgment, never()).acknowledge();
+        verify(inventoryService, never()).compensateInventory(any());
     }
 }
