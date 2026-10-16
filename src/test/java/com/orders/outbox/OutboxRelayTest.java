@@ -39,16 +39,19 @@ class OutboxRelayTest {
     @BeforeEach
     void setUp() {
         ReflectionTestUtils.setField(outboxRelay, "batchSize", 50);
+        ReflectionTestUtils.setField(outboxRelay, "sendTimeoutSeconds", 10L);
     }
 
     @Test
-    @DisplayName("Should poll and publish unpublished outbox events to Kafka and set publishedAt")
+    @DisplayName("Should poll and publish unpublished outbox events to Kafka and set publishedAt when send completes successfully")
     void relayEvents_whenUnpublishedEventsExist_publishesToKafkaAndUpdatesTimestamp() {
         UUID aggregateId = UUID.randomUUID();
         OutboxEvent event = new OutboxEvent(aggregateId, "OrderCreated", "order.created", "{\"payload\":\"test\"}");
 
         when(outboxEventRepository.findUnpublishedEvents(any(Pageable.class)))
                 .thenReturn(List.of(event));
+        when(kafkaTemplate.send(any(), any(), any()))
+                .thenReturn(java.util.concurrent.CompletableFuture.completedFuture(null));
 
         outboxRelay.relayEvents();
 
@@ -70,7 +73,7 @@ class OutboxRelayTest {
     }
 
     @Test
-    @DisplayName("Should leave publishedAt as null if Kafka send throws an exception (BR-008 retry)")
+    @DisplayName("Should leave publishedAt as null if Kafka send throws a synchronous exception (BR-008 retry)")
     void relayEvents_whenKafkaFails_leavesPublishedAtNullForRetry() {
         UUID aggregateId = UUID.randomUUID();
         OutboxEvent event = new OutboxEvent(aggregateId, "OrderCreated", "order.created", "{\"payload\":\"test\"}");
@@ -79,6 +82,41 @@ class OutboxRelayTest {
                 .thenReturn(List.of(event));
         doThrow(new RuntimeException("Kafka unreachable"))
                 .when(kafkaTemplate).send(any(), any(), any());
+
+        outboxRelay.relayEvents();
+
+        assertThat(event.getPublishedAt()).isNull();
+        verify(outboxEventRepository, never()).save(event);
+    }
+
+    @Test
+    @DisplayName("Should leave publishedAt as null if Kafka CompletableFuture fails / broker rejects (BR-008 retry)")
+    void relayEvents_whenKafkaFutureFails_leavesPublishedAtNullForRetry() {
+        UUID aggregateId = UUID.randomUUID();
+        OutboxEvent event = new OutboxEvent(aggregateId, "OrderCreated", "order.created", "{\"payload\":\"test\"}");
+
+        when(outboxEventRepository.findUnpublishedEvents(any(Pageable.class)))
+                .thenReturn(List.of(event));
+        when(kafkaTemplate.send(any(), any(), any()))
+                .thenReturn(java.util.concurrent.CompletableFuture.failedFuture(new RuntimeException("Broker rejected message")));
+
+        outboxRelay.relayEvents();
+
+        assertThat(event.getPublishedAt()).isNull();
+        verify(outboxEventRepository, never()).save(event);
+    }
+
+    @Test
+    @DisplayName("Should leave publishedAt as null if Kafka send times out (BR-008 retry)")
+    void relayEvents_whenKafkaSendTimesOut_leavesPublishedAtNullForRetry() {
+        ReflectionTestUtils.setField(outboxRelay, "sendTimeoutSeconds", 0L);
+        UUID aggregateId = UUID.randomUUID();
+        OutboxEvent event = new OutboxEvent(aggregateId, "OrderCreated", "order.created", "{\"payload\":\"test\"}");
+
+        when(outboxEventRepository.findUnpublishedEvents(any(Pageable.class)))
+                .thenReturn(List.of(event));
+        when(kafkaTemplate.send(any(), any(), any()))
+                .thenReturn(new java.util.concurrent.CompletableFuture<>());
 
         outboxRelay.relayEvents();
 
