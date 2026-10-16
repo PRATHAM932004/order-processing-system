@@ -1,6 +1,7 @@
 package com.orders.order.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.orders.common.error.GlobalExceptionHandler;
 import com.orders.order.dto.CreateUserRequest;
 import com.orders.order.dto.CustomerResponse;
 import com.orders.order.dto.UpdateUserRoleRequest;
@@ -45,7 +46,9 @@ class CustomerControllerTest {
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(customerController).build();
+        mockMvc = MockMvcBuilders.standaloneSetup(customerController)
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .build();
     }
 
     @Test

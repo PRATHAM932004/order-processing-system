@@ -3,6 +3,7 @@ package com.orders.config;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.orders.auth.AuthController;
 import com.orders.auth.service.AuthService;
+import com.orders.common.error.GlobalExceptionHandler;
 import com.orders.order.controller.CustomerController;
 import com.orders.order.controller.EventController;
 import com.orders.order.controller.OrderController;
@@ -54,7 +55,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         EventController.class,
         SystemStatusController.class
 })
-@Import({SecurityConfig.class, JwtAuthenticationFilter.class})
+@Import({SecurityConfig.class, JwtAuthenticationFilter.class, GlobalExceptionHandler.class})
 class SecurityConfigTest {
 
     @Autowired

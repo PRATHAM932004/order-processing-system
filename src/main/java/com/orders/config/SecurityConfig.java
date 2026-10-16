@@ -1,5 +1,8 @@
 package com.orders.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.orders.common.error.ErrorResponse;
 import com.orders.security.JwtAuthenticationFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -31,6 +34,7 @@ import java.util.List;
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
 
     @Value("${orders.cors.allowed-origins:http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,https://*.vercel.app}")
     private String allowedOriginsConfig;
@@ -61,12 +65,14 @@ public class SecurityConfig {
                 .authenticationEntryPoint((request, response, authException) -> {
                     response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                     response.setContentType("application/json");
-                    response.getWriter().write("{\"error\":\"Unauthorized: " + authException.getMessage() + "\"}");
+                    ErrorResponse error = new ErrorResponse("UNAUTHORIZED", "Unauthorized: " + authException.getMessage(), request.getRequestURI());
+                    response.getWriter().write(objectMapper.writeValueAsString(error));
                 })
                 .accessDeniedHandler((request, response, accessDeniedException) -> {
                     response.setStatus(HttpServletResponse.SC_FORBIDDEN);
                     response.setContentType("application/json");
-                    response.getWriter().write("{\"error\":\"Forbidden: " + accessDeniedException.getMessage() + "\"}");
+                    ErrorResponse error = new ErrorResponse("FORBIDDEN", "Forbidden: " + accessDeniedException.getMessage(), request.getRequestURI());
+                    response.getWriter().write(objectMapper.writeValueAsString(error));
                 })
             )
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

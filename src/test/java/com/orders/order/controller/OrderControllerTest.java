@@ -1,6 +1,7 @@
 package com.orders.order.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.orders.common.error.GlobalExceptionHandler;
 import com.orders.order.dto.CreateOrderRequest;
 import com.orders.order.dto.OrderItemRequest;
 import com.orders.order.dto.OrderResponse;
@@ -47,7 +48,9 @@ class OrderControllerTest {
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(orderController).build();
+        mockMvc = MockMvcBuilders.standaloneSetup(orderController)
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .build();
     }
 
     @Test
