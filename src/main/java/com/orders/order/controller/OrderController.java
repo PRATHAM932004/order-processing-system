@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -33,6 +34,7 @@ public class OrderController {
     private final OrderService orderService;
 
     @PostMapping
+    @PreAuthorize("hasAnyRole('CUSTOMER', 'ADMIN')")
     public ResponseEntity<OrderResponse> placeOrder(@Valid @RequestBody CreateOrderRequest request) {
         OrderResponse response = orderService.placeOrder(request);
         URI location = URI.create("/api/orders/" + response.id());
@@ -40,6 +42,7 @@ public class OrderController {
     }
 
     @GetMapping
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<List<OrderResponse>> getAllOrders(
             @RequestParam(required = false) OrderStatus status,
             @RequestParam(required = false) UUID customerId
@@ -48,6 +51,7 @@ public class OrderController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<OrderResponse> getOrderById(@PathVariable UUID id) {
         OrderResponse response = orderService.getOrderById(id);
         return ResponseEntity.ok(response);

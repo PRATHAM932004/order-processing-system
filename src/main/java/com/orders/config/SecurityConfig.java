@@ -20,6 +20,7 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import jakarta.servlet.http.HttpServletResponse;
 import java.util.Arrays;
 import java.util.List;
 
@@ -42,8 +43,31 @@ public class SecurityConfig {
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                .requestMatchers("/api/auth/**", "/api/products/**").permitAll()
-                .anyRequest().permitAll()
+                .requestMatchers("/api/auth/login", "/api/auth/register").permitAll()
+                .requestMatchers("/api/customers/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/products/reservations").hasAnyRole("ADMIN", "INVENTORY_MANAGER")
+                .requestMatchers(HttpMethod.POST, "/api/products/**").hasAnyRole("ADMIN", "INVENTORY_MANAGER")
+                .requestMatchers(HttpMethod.PUT, "/api/products/**").hasAnyRole("ADMIN", "INVENTORY_MANAGER")
+                .requestMatchers(HttpMethod.PATCH, "/api/products/**").hasAnyRole("ADMIN", "INVENTORY_MANAGER")
+                .requestMatchers(HttpMethod.DELETE, "/api/products/**").hasAnyRole("ADMIN", "INVENTORY_MANAGER")
+                .requestMatchers(HttpMethod.GET, "/api/products", "/api/products/**").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/orders/**").hasAnyRole("CUSTOMER", "ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/orders/**").hasAnyRole("CUSTOMER", "ADMIN", "INVENTORY_MANAGER")
+                .requestMatchers("/api/events/**").authenticated()
+                .requestMatchers("/api/system/**").authenticated()
+                .anyRequest().authenticated()
+            )
+            .exceptionHandling(ex -> ex
+                .authenticationEntryPoint((request, response, authException) -> {
+                    response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                    response.setContentType("application/json");
+                    response.getWriter().write("{\"error\":\"Unauthorized: " + authException.getMessage() + "\"}");
+                })
+                .accessDeniedHandler((request, response, accessDeniedException) -> {
+                    response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                    response.setContentType("application/json");
+                    response.getWriter().write("{\"error\":\"Forbidden: " + accessDeniedException.getMessage() + "\"}");
+                })
             )
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();

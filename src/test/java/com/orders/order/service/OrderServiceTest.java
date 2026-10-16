@@ -14,6 +14,8 @@ import com.orders.order.repository.OrderRepository;
 import com.orders.order.repository.ProductRepository;
 import com.orders.outbox.OutboxEvent;
 import com.orders.outbox.OutboxEventRepository;
+import com.orders.security.AuthenticatedUser;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -23,6 +25,10 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -78,6 +84,28 @@ class OrderServiceTest {
 
         product2 = new Product("Mechanical Keyboard", "Electronics", new BigDecimal("3499.00"), 50);
         product2.setId(product2Id);
+
+        authenticateAs(customerId, "CUSTOMER");
+    }
+
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
+    }
+
+    private void authenticateAs(UUID userId, String role) {
+        AuthenticatedUser user = new AuthenticatedUser(
+                userId,
+                "User " + role,
+                role.toLowerCase() + "@example.com",
+                role
+        );
+        UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
+                user,
+                null,
+                List.of(new SimpleGrantedAuthority("ROLE_" + role.toUpperCase()))
+        );
+        SecurityContextHolder.getContext().setAuthentication(auth);
     }
 
     @Test
@@ -179,5 +207,165 @@ class OrderServiceTest {
         assertThatThrownBy(() -> orderService.getOrderById(orderId))
                 .isInstanceOf(NoSuchElementException.class)
                 .hasMessageContaining("Order not found");
+    }
+
+    @Test
+    @DisplayName("placeOrder throws AccessDeniedException when unauthenticated")
+    void placeOrder_unauthenticated_throwsAccessDenied() {
+        SecurityContextHolder.clearContext();
+
+        CreateOrderRequest request = new CreateOrderRequest(
+                customerId,
+                List.of(new OrderItemRequest(product1Id, 1))
+        );
+
+        assertThatThrownBy(() -> orderService.placeOrder(request))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("Authentication required to place orders");
+    }
+
+    @Test
+    @DisplayName("placeOrder throws AccessDeniedException when caller is Inventory Manager")
+    void placeOrder_asInventoryManager_throwsAccessDenied() {
+        authenticateAs(UUID.randomUUID(), "INVENTORY_MANAGER");
+
+        CreateOrderRequest request = new CreateOrderRequest(
+                customerId,
+                List.of(new OrderItemRequest(product1Id, 1))
+        );
+
+        assertThatThrownBy(() -> orderService.placeOrder(request))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("Inventory Managers cannot place customer orders");
+    }
+
+    @Test
+    @DisplayName("placeOrder throws AccessDeniedException when customer attempts to place order for different customerId")
+    void placeOrder_customerForAnotherCustomer_throwsAccessDenied() {
+        UUID attackerId = UUID.randomUUID();
+        authenticateAs(attackerId, "CUSTOMER");
+
+        CreateOrderRequest request = new CreateOrderRequest(
+                customerId,
+                List.of(new OrderItemRequest(product1Id, 1))
+        );
+
+        assertThatThrownBy(() -> orderService.placeOrder(request))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("Customers can only place orders for themselves");
+    }
+
+    @Test
+    @DisplayName("placeOrder allows ADMIN to place order for customer")
+    void placeOrder_asAdmin_success() {
+        UUID adminId = UUID.randomUUID();
+        authenticateAs(adminId, "ADMIN");
+
+        CreateOrderRequest request = new CreateOrderRequest(
+                customerId,
+                List.of(new OrderItemRequest(product1Id, 1))
+        );
+
+        when(customerRepository.findById(customerId)).thenReturn(Optional.of(customer));
+        when(productRepository.findById(product1Id)).thenReturn(Optional.of(product1));
+        when(orderRepository.save(any(Order.class))).thenAnswer(inv -> {
+            Order o = inv.getArgument(0);
+            o.setId(UUID.randomUUID());
+            return o;
+        });
+
+        OrderResponse response = orderService.placeOrder(request);
+
+        assertThat(response).isNotNull();
+        assertThat(response.customerId()).isEqualTo(customerId);
+    }
+
+    @Test
+    @DisplayName("getOrderById throws AccessDeniedException when unauthenticated")
+    void getOrderById_unauthenticated_throwsAccessDenied() {
+        UUID orderId = UUID.randomUUID();
+        Order order = new Order(customerId, new BigDecimal("799.00"));
+        order.setId(orderId);
+
+        when(orderRepository.findByIdWithItems(orderId)).thenReturn(Optional.of(order));
+        SecurityContextHolder.clearContext();
+
+        assertThatThrownBy(() -> orderService.getOrderById(orderId))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("Authentication required to view order");
+    }
+
+    @Test
+    @DisplayName("getOrderById throws AccessDeniedException when customer attempts to view another customer's order")
+    void getOrderById_differentCustomer_throwsAccessDenied() {
+        UUID orderId = UUID.randomUUID();
+        Order order = new Order(customerId, new BigDecimal("799.00"));
+        order.setId(orderId);
+
+        when(orderRepository.findByIdWithItems(orderId)).thenReturn(Optional.of(order));
+
+        UUID otherCustomerId = UUID.randomUUID();
+        authenticateAs(otherCustomerId, "CUSTOMER");
+
+        assertThatThrownBy(() -> orderService.getOrderById(orderId))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("You are not authorized to view this order");
+    }
+
+    @Test
+    @DisplayName("getOrderById allows ADMIN to view any customer's order")
+    void getOrderById_asAdmin_success() {
+        UUID orderId = UUID.randomUUID();
+        Order order = new Order(customerId, new BigDecimal("799.00"));
+        order.setId(orderId);
+
+        when(orderRepository.findByIdWithItems(orderId)).thenReturn(Optional.of(order));
+
+        authenticateAs(UUID.randomUUID(), "ADMIN");
+
+        OrderResponse response = orderService.getOrderById(orderId);
+        assertThat(response.id()).isEqualTo(orderId);
+    }
+
+    @Test
+    @DisplayName("getAllOrders throws AccessDeniedException when unauthenticated")
+    void getAllOrders_unauthenticated_throwsAccessDenied() {
+        SecurityContextHolder.clearContext();
+
+        assertThatThrownBy(() -> orderService.getAllOrders(null, null))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("Authentication required to list orders");
+    }
+
+    @Test
+    @DisplayName("getAllOrders restricts non-admin customer to only their own orders")
+    void getAllOrders_asCustomer_restrictsToOwnOrders() {
+        authenticateAs(customerId, "CUSTOMER");
+
+        Order order = new Order(customerId, new BigDecimal("799.00"));
+        order.setId(UUID.randomUUID());
+
+        when(orderRepository.findByCustomerIdWithItemsOrderByCreatedAtDesc(customerId))
+                .thenReturn(List.of(order));
+
+        List<OrderResponse> result = orderService.getAllOrders(null, UUID.randomUUID());
+        assertThat(result).hasSize(1);
+        verify(orderRepository).findByCustomerIdWithItemsOrderByCreatedAtDesc(customerId);
+    }
+
+    @Test
+    @DisplayName("getAllOrders allows ADMIN to query all orders")
+    void getAllOrders_asAdmin_returnsAllOrders() {
+        authenticateAs(UUID.randomUUID(), "ADMIN");
+
+        Order order = new Order(customerId, new BigDecimal("799.00"));
+        order.setId(UUID.randomUUID());
+
+        when(orderRepository.findAllWithItemsOrderByCreatedAtDesc())
+                .thenReturn(List.of(order));
+
+        List<OrderResponse> result = orderService.getAllOrders(null, null);
+        assertThat(result).hasSize(1);
+        verify(orderRepository).findAllWithItemsOrderByCreatedAtDesc();
     }
 }

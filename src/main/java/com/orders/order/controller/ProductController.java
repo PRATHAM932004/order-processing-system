@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -43,6 +44,7 @@ public class ProductController {
     }
 
     @GetMapping("/reservations")
+    @PreAuthorize("hasAnyRole('ADMIN', 'INVENTORY_MANAGER')")
     public ResponseEntity<List<InventoryReservationResponse>> getAllReservations() {
         return ResponseEntity.ok(productService.getAllReservations());
     }
@@ -53,11 +55,13 @@ public class ProductController {
     }
 
     @PostMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'INVENTORY_MANAGER')")
     public ResponseEntity<ProductResponse> createProduct(@Valid @RequestBody ProductRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(productService.createProduct(request));
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'INVENTORY_MANAGER')")
     public ResponseEntity<ProductResponse> updateProduct(
             @PathVariable UUID id,
             @Valid @RequestBody ProductRequest request
@@ -66,6 +70,7 @@ public class ProductController {
     }
 
     @PatchMapping("/{id}/stock")
+    @PreAuthorize("hasAnyRole('ADMIN', 'INVENTORY_MANAGER')")
     public ResponseEntity<ProductResponse> updateProductStock(
             @PathVariable UUID id,
             @Valid @RequestBody UpdateStockRequest request
@@ -74,6 +79,7 @@ public class ProductController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'INVENTORY_MANAGER')")
     public ResponseEntity<Void> deleteProduct(@PathVariable UUID id) {
         productService.deleteProduct(id);
         return ResponseEntity.noContent().build();

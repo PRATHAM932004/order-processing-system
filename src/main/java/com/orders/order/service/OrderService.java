@@ -64,13 +64,16 @@ public class OrderService {
     @Transactional
     public OrderResponse placeOrder(CreateOrderRequest request) {
         AuthenticatedUser currentUser = getCurrentAuthenticatedUser();
-        UUID targetCustomerId = request.getCustomerId();
+        if (currentUser == null) {
+            throw new AccessDeniedException("Authentication required to place orders");
+        }
 
-        if (currentUser != null && currentUser.isInventoryManager()) {
+        if (currentUser.isInventoryManager()) {
             throw new AccessDeniedException("Inventory Managers cannot place customer orders");
         }
 
-        if (currentUser != null && !currentUser.isAdmin()) {
+        UUID targetCustomerId = request.getCustomerId();
+        if (!currentUser.isAdmin()) {
             if (targetCustomerId != null && !targetCustomerId.equals(currentUser.id())) {
                 throw new AccessDeniedException("Customers can only place orders for themselves");
             }
@@ -127,10 +130,10 @@ public class OrderService {
         try {
             String jsonPayload = objectMapper.writeValueAsString(envelope);
             OutboxEvent outboxEvent = new OutboxEvent(
-                    savedOrder.getId(),
-                    "OrderCreated",
-                    KafkaTopics.ORDER_CREATED,
-                    jsonPayload
+                savedOrder.getId(),
+                "OrderCreated",
+                KafkaTopics.ORDER_CREATED,
+                jsonPayload
             );
             outboxEventRepository.save(outboxEvent);
             log.info("Outbox event created for order: {}", savedOrder.getId());
@@ -148,7 +151,10 @@ public class OrderService {
                 .orElseThrow(() -> new NoSuchElementException("Order not found: " + id));
 
         AuthenticatedUser currentUser = getCurrentAuthenticatedUser();
-        if (currentUser != null && !currentUser.isAdmin() && !order.getCustomerId().equals(currentUser.id())) {
+        if (currentUser == null) {
+            throw new AccessDeniedException("Authentication required to view order");
+        }
+        if (!currentUser.isAdmin() && !order.getCustomerId().equals(currentUser.id())) {
             throw new AccessDeniedException("You are not authorized to view this order");
         }
 
@@ -158,9 +164,12 @@ public class OrderService {
     @Transactional(readOnly = true)
     public List<OrderResponse> getAllOrders(OrderStatus status, UUID customerId) {
         AuthenticatedUser currentUser = getCurrentAuthenticatedUser();
+        if (currentUser == null) {
+            throw new AccessDeniedException("Authentication required to list orders");
+        }
         UUID effectiveCustomerId = customerId;
 
-        if (currentUser != null && !currentUser.isAdmin()) {
+        if (!currentUser.isAdmin()) {
             effectiveCustomerId = currentUser.id();
         }
 

@@ -14,6 +14,7 @@ import com.orders.payment.entity.PaymentStatus;
 import com.orders.payment.repository.PaymentRepository;
 import com.orders.security.AuthenticatedUser;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -42,9 +43,12 @@ public class EventService {
     public List<KafkaEventResponse> getEvents(UUID orderId, String topic) {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         AuthenticatedUser currentUser = (auth != null && auth.getPrincipal() instanceof AuthenticatedUser u) ? u : null;
+        if (currentUser == null) {
+            throw new AccessDeniedException("Authentication required to view events");
+        }
 
         Set<UUID> allowedOrderIds = null;
-        if (currentUser != null && !currentUser.canManageInventory()) {
+        if (!currentUser.canManageInventory()) {
             allowedOrderIds = orderRepository.findByCustomerIdWithItemsOrderByCreatedAtDesc(currentUser.id())
                     .stream()
                     .map(Order::getId)
